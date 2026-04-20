@@ -1,0 +1,16 @@
+PyQt6==6.8.1
+opencv-python==4.10.0.84
+numpy==1.26.4
+Pillow==11.1.0
+pydantic==2.10.6
+loguru==0.7.3
+scipy==1.13.1
+trimesh==4.5.3
+pycolmap==3.10.0
+pyvistaqt==0.11.2
+pyvista==0.44.2
+vtk==9.3.1
+# Dense reconstruction backend (CPU + Apple Silicon Metal)
+# Option A — OpenMVS: brew install openmvs  (best quality, no pip)
+# Option B — Open3D: uncomment line below (CPU SGBM depth fusion)
+open3d==0.18.0

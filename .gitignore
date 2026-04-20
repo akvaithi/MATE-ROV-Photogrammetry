@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / tooling
+.idea/
+.vscode/
+.claude/
+
+# App-local data
+sessions/
+*.usdz
+*.ply
+*.obj
+*.mtl
+
+# Compiled Swift helper (built on demand)
+app/core/reconstruction/realitykit_helper
