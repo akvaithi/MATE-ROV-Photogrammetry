@@ -30,3 +30,7 @@ sessions/
 
 # Compiled Swift helper (built on demand)
 app/core/reconstruction/realitykit_helper
+
+# PyInstaller build artifacts
+build/
+dist/

@@ -1,5 +1,5 @@
 PyQt6==6.8.1
-opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 numpy==1.26.4
 Pillow==11.1.0
 pydantic==2.10.6
