@@ -38,10 +38,15 @@ class StreamPanel(QWidget):
         status_row.addStretch()
         status_row.addWidget(self._fps_label)
 
+        # Stream-health row: drops / reconnects / stalls / latency (Goal 3)
+        self._health_label = QLabel("drops 0 · reconnects 0 · stalls 0 · latency —")
+        self._health_label.setStyleSheet("color: #888; font-size: 11px;")
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._canvas)
         layout.addLayout(status_row)
+        layout.addWidget(self._health_label)
 
     # ------------------------------------------------------------------
     # Slots wired from StreamWorker signals
@@ -74,3 +79,20 @@ class StreamPanel(QWidget):
     @pyqtSlot(float)
     def on_fps_updated(self, fps: float) -> None:
         self._fps_label.setText(f"FPS: {fps:.1f}")
+
+    @pyqtSlot(object)
+    def on_stream_health(self, stats) -> None:
+        """Display drop / reconnect / stall counts and inter-frame latency."""
+        if stats.last_gap_ms:
+            latency = f"{stats.last_gap_ms:.0f}/{stats.max_gap_ms:.0f} ms (now/max)"
+        else:
+            latency = "—"
+        self._health_label.setText(
+            f"drops {stats.drops} · reconnects {stats.reconnects} · "
+            f"stalls {stats.stalls} · latency {latency}"
+        )
+        # Amber when the stream has had any trouble this session, else muted grey.
+        trouble = stats.drops or stats.stalls
+        self._health_label.setStyleSheet(
+            f"color: {'#ffd43b' if trouble else '#888'}; font-size: 11px;"
+        )

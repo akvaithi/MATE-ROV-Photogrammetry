@@ -89,12 +89,22 @@ ReconstructionWorker (QThread)   on demand, when frame_count ≥ min_frames
 | Path | Role |
 |---|---|
 | [app/core/stream_worker.py](app/core/stream_worker.py) | RTSP capture loop with auto-reconnect |
+| [app/core/stream_health.py](app/core/stream_health.py) | Drop / latency detection, logging, and stream metrics |
 | [app/core/capture_engine.py](app/core/capture_engine.py) | Quality-gated frame capture, runs on its own thread |
 | [app/core/quality_assessor.py](app/core/quality_assessor.py) | Sharpness, novelty, and ML-based framing score |
 | [app/core/reconstruction/realitykit_pipeline.py](app/core/reconstruction/realitykit_pipeline.py) | Drives the Swift helper, splays progress into stage bars |
 | [app/core/reconstruction/realitykit_helper.swift](app/core/reconstruction/realitykit_helper.swift) | CLI wrapper around `PhotogrammetrySession`, emits JSON events |
 | [app/core/reconstruction/colmap_pipeline.py](app/core/reconstruction/colmap_pipeline.py) | SfM + MVS via pycolmap + COLMAP CLI |
 | [app/ui/main_window.py](app/ui/main_window.py) | Owns all workers and signal routing |
+
+## Stream health & logging
+
+The RTSP ingest is instrumented for **dropped frames and high latency**: drops,
+reconnects, and inter-frame stalls are detected, shown live on the Stream tab,
+and logged to `~/.photogrammetry/logs/` (a rotating app log plus a per-run
+`stream_health_*.jsonl` for analysis). Thresholds live in `app/config.py`
+(`stream_latency_warn_ms`, `stream_health_log`). Full write-up:
+[docs/RTSP-Pipeline.md](docs/RTSP-Pipeline.md).
 
 ## License
 

@@ -11,6 +11,8 @@ class AppConfig:
     rtsp_url: str = "rtsp://192.168.1.100:8554/stream"
     stream_reconnect_delay: float = 2.0   # seconds before reconnect attempt
     stream_buffer_size: int = 1           # OpenCV internal buffer size (keep low for low latency)
+    stream_latency_warn_ms: float = 1500.0  # inter-frame gap above this logs a high-latency stall
+    stream_health_log: bool = True        # write a per-run JSONL stream-health event log
 
     # Capture modes
     capture_mode: str = "auto"            # "auto", "interval", "manual"

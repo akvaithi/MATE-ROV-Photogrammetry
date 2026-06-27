@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
         )
         self._stream_worker.connection_status.connect(self._on_connection_status)
         self._stream_worker.fps_updated.connect(self._stream_panel.on_fps_updated)
+        self._stream_worker.stream_health.connect(self._stream_panel.on_stream_health)
         self._stream_worker.error.connect(self._on_stream_error)
 
         # Stream → capture engine (full-res frames)

@@ -11,6 +11,7 @@ import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from app.config import AppConfig
+from app.core.stream_health import StreamHealthMonitor
 
 
 class StreamWorker(QThread):
@@ -31,6 +32,9 @@ class StreamWorker(QThread):
         Current decode FPS, updated every second.
     error(str)
         Fatal error message (e.g. bad URL that never connects).
+    stream_health(object)
+        StreamStats snapshot (drops, reconnects, stalls, latency) for the UI.
+        Backed by StreamHealthMonitor, which also logs and persists events.
     """
 
     frame_ready = pyqtSignal(object)           # np.ndarray full-res BGR
@@ -38,15 +42,26 @@ class StreamWorker(QThread):
     connection_status = pyqtSignal(str)
     fps_updated = pyqtSignal(float)
     error = pyqtSignal(str)
+    stream_health = pyqtSignal(object)         # StreamStats
 
     # Maximum width for the display preview (height is computed to keep AR)
     DISPLAY_MAX_WIDTH = 854
+
+    # Give up (emit a fatal error) after this many consecutive failed opens
+    MAX_OPEN_ATTEMPTS = 5
 
     def __init__(self, config: AppConfig, parent=None) -> None:
         super().__init__(parent)
         self._config = config
         self._stop_flag = False
         self._cap: cv2.VideoCapture | None = None
+        self._monitor = StreamHealthMonitor(
+            latency_warn_ms=config.stream_latency_warn_ms,
+            write_log=config.stream_health_log,
+        )
+
+    def _emit_health(self) -> None:
+        self.stream_health.emit(self._monitor.snapshot())
 
     # ------------------------------------------------------------------
     # Public control API (called from main thread)
@@ -65,55 +80,72 @@ class StreamWorker(QThread):
 
     def run(self) -> None:
         self._stop_flag = False
-        consecutive_failures = 0
+        open_attempts = 0
         frame_count = 0
         fps_timer_start = time.monotonic()
 
         while not self._stop_flag:
             # --- Open / reopen the capture ---
             if self._cap is None or not self._cap.isOpened():
+                open_attempts += 1
                 self.connection_status.emit("reconnecting")
+                self._monitor.on_connect_attempt(open_attempts)
                 self._cap = self._open_capture(self._config.rtsp_url)
                 if self._cap is None:
-                    consecutive_failures += 1
-                    if consecutive_failures >= 5:
+                    self._monitor.on_open_failed(open_attempts)
+                    if open_attempts >= self.MAX_OPEN_ATTEMPTS:
+                        self._monitor.on_fatal(
+                            f"Cannot connect to {self._config.rtsp_url} after "
+                            f"{open_attempts} attempts."
+                        )
                         self.error.emit(
                             f"Cannot connect to {self._config.rtsp_url} after "
-                            f"{consecutive_failures} attempts."
+                            f"{open_attempts} attempts."
                         )
+                    self._emit_health()
                     self.msleep(int(self._config.stream_reconnect_delay * 1000))
                     continue
-                consecutive_failures = 0
+                open_attempts = 0
+                self._monitor.on_connected()
                 self.connection_status.emit("connected")
+                self._emit_health()
+                frame_count = 0
+                fps_timer_start = time.monotonic()
 
             # --- Read one frame ---
             ret, bgr = self._cap.read()
             if not ret or bgr is None:
                 self._cap.release()
                 self._cap = None
+                self._monitor.on_drop("read_failed")
                 self.connection_status.emit("reconnecting")
+                self._emit_health()
                 self.msleep(int(self._config.stream_reconnect_delay * 1000))
                 continue
 
-            # --- Emit full-res for capture engine ---
+            # --- Track latency / health, then emit full-res for capture engine ---
+            self._monitor.on_frame()
             self.frame_ready.emit(bgr)
 
             # --- Build display frame ---
             display = self._make_display_frame(bgr)
             self.display_frame_ready.emit(display)
 
-            # --- FPS accounting ---
+            # --- FPS accounting (once per second, also refresh health) ---
             frame_count += 1
             elapsed = time.monotonic() - fps_timer_start
             if elapsed >= 1.0:
                 self.fps_updated.emit(frame_count / elapsed)
                 frame_count = 0
                 fps_timer_start = time.monotonic()
+                self._emit_health()
 
         # Cleanup
         if self._cap is not None:
             self._cap.release()
             self._cap = None
+        self._monitor.on_close()
+        self._emit_health()
         self.connection_status.emit("disconnected")
 
     # ------------------------------------------------------------------
