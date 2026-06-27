@@ -7,7 +7,7 @@ Usage
     python main.py
 
 Requirements: see requirements.txt
-Recommended Python: 3.12 (open3d wheels available)
+Recommended Python: 3.12
 """
 import sys
 import os

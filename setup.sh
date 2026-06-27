@@ -22,28 +22,18 @@ fi
 source .venv/bin/activate
 pip install --upgrade pip wheel --quiet
 
-# Install pip packages (excludes OpenMVS which is a Homebrew binary)
-pip install \
-    PyQt6 opencv-python "numpy<2" Pillow loguru scipy trimesh \
-    pycolmap open3d pyvista pyvistaqt vtk \
-    --quiet
+# Install pip packages (reconstruction needs no Python deps — see below)
+pip install -r requirements.txt --quiet
 
 echo "pip packages installed."
 
-# Check for COLMAP binary (needed for SfM sparse stage)
-if command -v colmap &>/dev/null; then
-    echo "COLMAP: found ($(colmap --version 2>&1 | head -1))"
+# Reconstruction backend: Apple RealityKit / Object Capture (macOS only),
+# compiled from the bundled Swift helper on first run. Needs Xcode CLT.
+if [ "$(uname)" = "Darwin" ] && command -v swiftc &>/dev/null; then
+    echo "RealityKit: ready (swiftc found)"
 else
-    echo "COLMAP: NOT found — install with: brew install colmap"
-    echo "  (Required for SfM. Dense stage uses Open3D which is pip-installed.)"
-fi
-
-# Check for OpenMVS (optional — best dense quality on Apple Silicon)
-if command -v DensifyPointCloud &>/dev/null || command -v OpenMVS_DensifyPointCloud &>/dev/null; then
-    echo "OpenMVS: found (best dense backend)"
-else
-    echo "OpenMVS: not found (Open3D CPU fallback will be used for dense)"
-    echo "  Optional install: brew install openmvs"
+    echo "RealityKit: NOT available — requires macOS + Xcode Command Line Tools"
+    echo "  Install with: xcode-select --install"
 fi
 
 echo ""

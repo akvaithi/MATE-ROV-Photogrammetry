@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QGroupBox,
     QHBoxLayout,
@@ -33,7 +32,6 @@ PIPELINE_STAGES = [
 
 
 class ReconstructionPanel(QWidget):
-    backend_changed = pyqtSignal(str)       # "auto" | "realitykit" | "colmap"
     detail_changed = pyqtSignal(str)        # "preview" | "reduced" | "medium" | "full" | "raw"
 
     def __init__(self, parent=None) -> None:
@@ -53,29 +51,18 @@ class ReconstructionPanel(QWidget):
         top_layout = QVBoxLayout(top_widget)
         top_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Backend picker + dense toggle
-        backend_row = QHBoxLayout()
-        backend_row.addWidget(QLabel("Engine:"))
-        self._backend_combo = QComboBox()
-        self._backend_combo.addItem("Auto", "auto")
+        # Engine (RealityKit only) + detail picker
+        engine_row = QHBoxLayout()
         rk_available = RealityKitPipeline.is_available()
-        rk_label = "RealityKit (Apple Object Capture)"
-        if not rk_available:
-            rk_label += "  — unavailable"
-        self._backend_combo.addItem(rk_label, "realitykit")
-        if not rk_available:
-            # Disable the RealityKit row
-            item = self._backend_combo.model().item(1)
-            if item is not None:
-                item.setEnabled(False)
-        self._backend_combo.addItem("COLMAP (sparse + MVS fallback)", "colmap")
-        self._backend_combo.currentIndexChanged.connect(
-            lambda _i: self.backend_changed.emit(self._backend_combo.currentData())
+        engine_lbl = QLabel(
+            "Engine: RealityKit (Apple Object Capture)"
+            + ("" if rk_available else "  — unavailable on this platform")
         )
-        backend_row.addWidget(self._backend_combo)
+        engine_lbl.setStyleSheet("color: #aaa;" if rk_available else "color: #ff6b6b;")
+        engine_row.addWidget(engine_lbl)
 
-        backend_row.addSpacing(12)
-        backend_row.addWidget(QLabel("Detail:"))
+        engine_row.addSpacing(12)
+        engine_row.addWidget(QLabel("Detail:"))
         self._detail_combo = QComboBox()
         for label, key in [
             ("Preview",  "preview"),
@@ -89,22 +76,9 @@ class ReconstructionPanel(QWidget):
         self._detail_combo.currentIndexChanged.connect(
             lambda _i: self.detail_changed.emit(self._detail_combo.currentData())
         )
-        backend_row.addWidget(self._detail_combo)
-        backend_row.addStretch()
-        top_layout.addLayout(backend_row)
-
-        # Dense toggle + backend status
-        dense_row = QHBoxLayout()
-        self._dense_check = QCheckBox("Dense reconstruction (COLMAP only)")
-        self._dense_check.setChecked(True)
-        dense_row.addWidget(self._dense_check)
-
-        self._dense_backend_label = QLabel()
-        self._dense_backend_label.setStyleSheet("color: #aaa; font-size: 11px;")
-        dense_row.addWidget(self._dense_backend_label)
-        dense_row.addStretch()
-        top_layout.addLayout(dense_row)
-        self._refresh_dense_backend_label()
+        engine_row.addWidget(self._detail_combo)
+        engine_row.addStretch()
+        top_layout.addLayout(engine_row)
 
         # Progress bars
         stages_box = QGroupBox("Pipeline Progress")
@@ -187,41 +161,11 @@ class ReconstructionPanel(QWidget):
         self._status_label.setText("Idle")
         self._output_label.clear()
 
-    @property
-    def dense_enabled(self) -> bool:
-        return self._dense_check.isChecked()
-
-    def set_backend(self, backend: str) -> None:
-        for i in range(self._backend_combo.count()):
-            if self._backend_combo.itemData(i) == backend:
-                self._backend_combo.setCurrentIndex(i)
-                return
-
     def set_detail(self, detail: str) -> None:
         for i in range(self._detail_combo.count()):
             if self._detail_combo.itemData(i) == detail:
                 self._detail_combo.setCurrentIndex(i)
                 return
-
-    def _refresh_dense_backend_label(self) -> None:
-        """Show which dense backend is available."""
-        import shutil
-        parts = []
-        if shutil.which("DensifyPointCloud") or shutil.which("OpenMVS_DensifyPointCloud"):
-            parts.append("OpenMVS ✓")
-        try:
-            import open3d  # noqa: F401
-            parts.append("Open3D ✓")
-        except ImportError:
-            pass
-        if parts:
-            self._dense_backend_label.setText("Backend: " + ", ".join(parts))
-            self._dense_backend_label.setStyleSheet("color: #51cf66; font-size: 11px;")
-        else:
-            self._dense_backend_label.setText(
-                "No dense backend (install OpenMVS or open3d) — will mesh sparse cloud"
-            )
-            self._dense_backend_label.setStyleSheet("color: #ffd43b; font-size: 11px;")
 
     # ------------------------------------------------------------------
     # Slots wired from ReconstructionWorker

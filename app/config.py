@@ -35,16 +35,7 @@ class AppConfig:
     output_dir: str = str(Path.home() / "photogrammetry_sessions")
     jpeg_quality: int = 95               # JPEG save quality for captured frames
 
-    # COLMAP
-    colmap_binary: str = "colmap"        # path or name; detected at startup
-    colmap_camera_model: str = "OPENCV"  # OPENCV includes radial distortion
-    colmap_max_features: int = 8192
-
-    # Reconstruction backend
-    # "auto"       — RealityKit on macOS, COLMAP elsewhere
-    # "realitykit" — Apple Object Capture (same engine as PhotoCatch)
-    # "colmap"     — pycolmap + COLMAP CLI + Open3D fallback
-    reconstruction_backend: str = "auto"
+    # Reconstruction — RealityKit (Apple Object Capture) is the only backend.
     realitykit_detail: str = "medium"    # preview | reduced | medium | full | raw
 
     def save(self, path: Path) -> None:

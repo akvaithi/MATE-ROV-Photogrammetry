@@ -2,15 +2,15 @@ PyQt6==6.8.1
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
 Pillow==11.1.0
-pydantic==2.10.6
 loguru==0.7.3
-scipy==1.13.1
-trimesh==4.5.3
-pycolmap==3.10.0
-pyvistaqt==0.11.2
+
+# Reconstruction uses Apple's RealityKit / Object Capture (macOS only) via a
+# compiled Swift helper — no Python packages required, just Xcode Command Line
+# Tools (`xcode-select --install`).
+
+# Optional — embedded 3D mesh preview. The Reconstruct panel falls back to a
+# placeholder label if these aren't installed, and they're excluded from the
+# packaged .app to keep the bundle small.
 pyvista==0.44.2
+pyvistaqt==0.11.2
 vtk==9.3.1
-# Dense reconstruction backend (CPU + Apple Silicon Metal)
-# Option A — OpenMVS: brew install openmvs  (best quality, no pip)
-# Option B — Open3D: uncomment line below (CPU SGBM depth fusion)
-open3d==0.18.0

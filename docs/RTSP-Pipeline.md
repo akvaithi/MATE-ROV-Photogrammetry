@@ -14,7 +14,7 @@ streams are detected, logged, and measurable.
 
 ```
  RTSP camera ─▶ StreamWorker ─▶ CaptureEngine ─▶ FrameStore ─▶ ReconstructionWorker ─▶ model
- (IP / ROV)     (QThread)        (quality gate)   (JPEGs)       (RealityKit / COLMAP)   (.usdz/.ply)
+ (IP / ROV)     (QThread)        (quality gate)   (JPEGs)       (RealityKit)            (.usdz)
 ```
 
 | Stage | Module | Role |
@@ -23,7 +23,7 @@ streams are detected, logged, and measurable.
 | **Health** | [`app/core/stream_health.py`](../app/core/stream_health.py) | Tracks drops, reconnects, high-latency stalls, and inter-frame timing; logs and persists events. |
 | **Quality gate** | [`app/core/capture_engine.py`](../app/core/capture_engine.py) + [`quality_assessor.py`](../app/core/quality_assessor.py) | Keeps only frames that are sharp, novel, and well-framed. |
 | **Store** | [`app/core/frame_store.py`](../app/core/frame_store.py) | Writes JPEGs, de-duplicated by Bhattacharyya distance. |
-| **Reconstruct** | [`reconstruction/`](../app/core/reconstruction/) | RealityKit (Apple Object Capture → `.usdz`) or COLMAP (SfM+MVS → `.ply`). |
+| **Reconstruct** | [`reconstruction/`](../app/core/reconstruction/) | RealityKit (Apple Object Capture → `.usdz`). macOS-only. |
 
 Each worker runs on its own thread and communicates with the UI through Qt
 signals — the main thread never touches OpenCV or the network directly.

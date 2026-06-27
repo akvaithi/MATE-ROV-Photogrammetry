@@ -27,7 +27,6 @@ datas = [
 ]
 
 hiddenimports = [
-    "pycolmap",
     "loguru",
 ]
 

@@ -36,7 +36,7 @@ class CapturePanel(QWidget):
     stop_capture_requested = pyqtSignal()
     manual_capture_requested = pyqtSignal()
     export_pngs_requested = pyqtSignal()
-    reconstruct_requested = pyqtSignal(bool)    # bool = dense
+    reconstruct_requested = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -136,7 +136,7 @@ class CapturePanel(QWidget):
 
         self._recon_btn = QPushButton("Reconstruct 3D")
         self._recon_btn.setStyleSheet("background: #1971c2; color: white; font-weight: bold;")
-        self._recon_btn.clicked.connect(lambda: self.reconstruct_requested.emit(True))
+        self._recon_btn.clicked.connect(self.reconstruct_requested.emit)
 
         btn_row.addWidget(self._start_btn)
         btn_row.addWidget(self._end_btn)

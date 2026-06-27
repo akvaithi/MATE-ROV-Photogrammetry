@@ -39,7 +39,6 @@ class AppState:
     session_id: str = ""
     session_dir: Optional[Path] = None
     frames_dir: Optional[Path] = None
-    colmap_dir: Optional[Path] = None
     output_dir: Optional[Path] = None
 
     frames: list[FrameRecord] = field(default_factory=list)
@@ -51,15 +50,12 @@ class AppState:
     capture_running: bool = False
     capture_mode: str = "manual"
 
-    colmap_available: bool = False
-
     def new_session(self, base_output_dir: Path) -> None:
         self.session_id = datetime.now().strftime("session_%Y%m%d_%H%M%S")
         self.session_dir = base_output_dir / self.session_id
         self.frames_dir = self.session_dir / "frames"
-        self.colmap_dir = self.session_dir / "colmap"
         self.output_dir = self.session_dir / "output"
-        for d in (self.frames_dir, self.colmap_dir, self.output_dir):
+        for d in (self.frames_dir, self.output_dir):
             d.mkdir(parents=True, exist_ok=True)
         self.frames = []
         self.reconstruction = ReconstructionStatus()

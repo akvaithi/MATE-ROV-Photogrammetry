@@ -5,7 +5,6 @@ and wires them together with Qt signals.
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, pyqtSlot
@@ -47,9 +46,6 @@ class MainWindow(QMainWindow):
         self._state = AppState()
         self._state.new_session(Path(self._config.output_dir))
 
-        # Check COLMAP availability at startup
-        self._state.colmap_available = bool(shutil.which(self._config.colmap_binary))
-
         # ── Workers ──────────────────────────────────────────────────────
         self._stream_worker = StreamWorker(self._config)
 
@@ -67,7 +63,6 @@ class MainWindow(QMainWindow):
         self._stream_panel = StreamPanel()
         self._capture_panel = CapturePanel()
         self._recon_panel = ReconstructionPanel()
-        self._recon_panel.set_backend(self._config.reconstruction_backend)
         self._recon_panel.set_detail(self._config.realitykit_detail)
 
         self._tabs.addTab(self._stream_panel, "Stream")
@@ -79,13 +74,6 @@ class MainWindow(QMainWindow):
         self._conn_indicator = QLabel("●")
         self._conn_indicator.setStyleSheet("color: #ff6b6b;")
         self._status_bar.addPermanentWidget(self._conn_indicator)
-        self._colmap_indicator = QLabel(
-            "COLMAP: ✓" if self._state.colmap_available else "COLMAP: not found"
-        )
-        self._colmap_indicator.setStyleSheet(
-            "color: #51cf66;" if self._state.colmap_available else "color: #ff6b6b;"
-        )
-        self._status_bar.addPermanentWidget(self._colmap_indicator)
 
         self._build_menu()
         self._wire_signals()
@@ -186,7 +174,6 @@ class MainWindow(QMainWindow):
         self._capture_engine.status_message.connect(self._status_bar.showMessage)
 
         # Reconstruction panel → config
-        self._recon_panel.backend_changed.connect(self._on_backend_changed)
         self._recon_panel.detail_changed.connect(self._on_detail_changed)
 
     # ------------------------------------------------------------------
@@ -226,17 +213,12 @@ class MainWindow(QMainWindow):
         self._capture_engine.update_config(self._config)
 
     @pyqtSlot(str)
-    def _on_backend_changed(self, backend: str) -> None:
-        self._config.reconstruction_backend = backend
-        self._config.save(AppConfig.default_config_path())
-
-    @pyqtSlot(str)
     def _on_detail_changed(self, detail: str) -> None:
         self._config.realitykit_detail = detail
         self._config.save(AppConfig.default_config_path())
 
-    @pyqtSlot(bool)
-    def _start_reconstruction(self, dense: bool) -> None:
+    @pyqtSlot()
+    def _start_reconstruction(self) -> None:
         if self._state.frame_count < self._config.min_frames:
             QMessageBox.warning(
                 self,
@@ -256,7 +238,6 @@ class MainWindow(QMainWindow):
         self._recon_worker = ReconstructionWorker(
             config=self._config,
             app_state=self._state,
-            dense=dense and self._state.colmap_available,
         )
         self._recon_worker.stage_started.connect(self._recon_panel.on_stage_started)
         self._recon_worker.stage_progress.connect(self._recon_panel.on_stage_progress)
@@ -350,14 +331,6 @@ class MainWindow(QMainWindow):
             # Hot-update workers
             self._stream_worker.update_config(new_config)
             self._capture_engine.update_config(new_config)
-            colmap_ok = bool(shutil.which(new_config.colmap_binary))
-            self._state.colmap_available = colmap_ok
-            self._colmap_indicator.setText(
-                "COLMAP: ✓" if colmap_ok else "COLMAP: not found"
-            )
-            self._colmap_indicator.setStyleSheet(
-                "color: #51cf66;" if colmap_ok else "color: #ff6b6b;"
-            )
             self._status_bar.showMessage("Settings saved.", 3000)
 
     # ------------------------------------------------------------------

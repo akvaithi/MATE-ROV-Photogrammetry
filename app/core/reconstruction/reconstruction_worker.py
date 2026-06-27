@@ -1,6 +1,10 @@
 """
-ReconstructionWorker — runs the ColmapPipeline on a dedicated QThread,
-emitting granular progress signals back to the UI.
+ReconstructionWorker — runs the RealityKit (Apple Object Capture) pipeline on a
+dedicated QThread, emitting granular progress signals back to the UI.
+
+RealityKit is the only backend: it produces the highest-quality meshes with no
+extra tooling. It is macOS-only (Apple's PhotogrammetrySession), so on an
+unsupported platform the worker fails fast with a clear message.
 """
 from __future__ import annotations
 
@@ -9,7 +13,6 @@ from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from app.config import AppConfig
-from app.core.reconstruction.colmap_pipeline import ColmapPipeline
 from app.core.reconstruction.realitykit_pipeline import RealityKitPipeline
 from app.state import AppState
 
@@ -33,17 +36,10 @@ class ReconstructionWorker(QThread):
     reconstruction_failed = pyqtSignal(str)
     log_message = pyqtSignal(str)
 
-    def __init__(
-        self,
-        config: AppConfig,
-        app_state: AppState,
-        dense: bool = True,
-        parent=None,
-    ) -> None:
+    def __init__(self, config: AppConfig, app_state: AppState, parent=None) -> None:
         super().__init__(parent)
         self._config = config
         self._state = app_state
-        self._dense = dense
 
     # ------------------------------------------------------------------
     # QThread entry point
@@ -54,20 +50,22 @@ class ReconstructionWorker(QThread):
             self.reconstruction_failed.emit("No active session.")
             return
 
+        if not RealityKitPipeline.is_available():
+            self.reconstruction_failed.emit(
+                "RealityKit (Apple Object Capture) is unavailable. It requires "
+                "macOS 12+ with the Swift toolchain (run `xcode-select --install`)."
+            )
+            return
+
         # Intercept loguru output and relay to UI
         from loguru import logger
         sink_id = logger.add(
             lambda msg: self.log_message.emit(msg.strip()), level="DEBUG"
         )
-
-        backend = self._resolve_backend()
-        logger.info(f"Reconstruction backend: {backend}")
+        logger.info("Reconstruction backend: RealityKit (Apple Object Capture)")
 
         try:
-            if backend == "realitykit":
-                output_path = self._run_realitykit()
-            else:
-                output_path = self._run_colmap()
+            output_path = self._run_realitykit()
         except Exception as exc:
             logger.remove(sink_id)
             self.reconstruction_failed.emit(str(exc))
@@ -84,17 +82,8 @@ class ReconstructionWorker(QThread):
             )
 
     # ------------------------------------------------------------------
-    # Backend dispatch
+    # Backend
     # ------------------------------------------------------------------
-
-    def _resolve_backend(self) -> str:
-        pref = getattr(self._config, "reconstruction_backend", "auto")
-        if pref == "realitykit":
-            return "realitykit"
-        if pref == "colmap":
-            return "colmap"
-        # auto — prefer Apple's pipeline on macOS with Swift available
-        return "realitykit" if RealityKitPipeline.is_available() else "colmap"
 
     def _run_realitykit(self) -> Path:
         assert self._state.frames_dir is not None
@@ -104,21 +93,6 @@ class ReconstructionWorker(QThread):
             image_dir=self._state.frames_dir,
             output_path=self._state.output_dir / "model.usdz",
             progress_cb=self._progress_cb,
-        )
-
-    def _run_colmap(self) -> Path:
-        assert self._state.frames_dir is not None
-        assert self._state.colmap_dir is not None
-        pipeline = ColmapPipeline(
-            colmap_binary=self._config.colmap_binary,
-            camera_model=self._config.colmap_camera_model,
-            max_features=self._config.colmap_max_features,
-        )
-        return pipeline.run(
-            image_dir=self._state.frames_dir,
-            workspace=self._state.colmap_dir,
-            progress_cb=self._progress_cb,
-            dense=self._dense,
         )
 
     # ------------------------------------------------------------------

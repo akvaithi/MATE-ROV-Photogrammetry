@@ -1,6 +1,5 @@
 """
-SettingsDialog — configure RTSP URL, capture thresholds, output directory,
-and COLMAP binary path.
+SettingsDialog — configure RTSP URL, capture thresholds, and output directory.
 """
 from __future__ import annotations
 
@@ -127,11 +126,7 @@ class SettingsDialog(QDialog):
         dir_row.addWidget(browse_btn)
         output_form.addRow("Output directory:", dir_row)
 
-        self._colmap_binary = QLineEdit()
-        self._colmap_binary.setPlaceholderText("colmap")
-        output_form.addRow("COLMAP binary path:", self._colmap_binary)
-
-        tabs.addTab(output_tab, "Output / COLMAP")
+        tabs.addTab(output_tab, "Output")
 
         layout.addWidget(tabs)
 
@@ -156,13 +151,12 @@ class SettingsDialog(QDialog):
         self._max_frames.setValue(cfg.max_frames)
         self._jpeg_quality.setValue(cfg.jpeg_quality)
         self._output_dir.setText(cfg.output_dir)
-        self._colmap_binary.setText(cfg.colmap_binary)
 
     def get_config(self) -> AppConfig:
         """Return an updated AppConfig from current widget values.
 
         Starts from the original config so fields not exposed by the dialog
-        (e.g. reconstruction_backend, realitykit_detail) are preserved.
+        (e.g. realitykit_detail) are preserved.
         """
         from dataclasses import replace
         return replace(
@@ -179,7 +173,6 @@ class SettingsDialog(QDialog):
             max_frames=self._max_frames.value(),
             jpeg_quality=self._jpeg_quality.value(),
             output_dir=self._output_dir.text().strip(),
-            colmap_binary=self._colmap_binary.text().strip() or "colmap",
         )
 
     def _browse_output_dir(self) -> None:
