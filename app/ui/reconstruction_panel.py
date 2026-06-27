@@ -4,7 +4,10 @@ and an embedded 3D mesh preview.
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from pathlib import Path
+
+from PyQt6.QtCore import Qt, QProcess, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
     QGroupBox,
@@ -127,28 +130,29 @@ class ReconstructionPanel(QWidget):
         splitter.setSizes([300, 200])
         root.addWidget(splitter)
 
-        # ── 3D viewer placeholder ───────────────────────────────────────
-        self._viewer_label = QLabel("3D preview will appear here after reconstruction.")
+        # ── Model preview (USDZ via macOS Quick Look) ───────────────────
+        self._model_path: str | None = None
+        self._thumb_pixmap: QPixmap | None = None
+        self._thumb_proc: QProcess | None = None
+        self._thumb_expected: str | None = None
+
+        self._viewer_label = QLabel("3D preview appears here after reconstruction.")
         self._viewer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._viewer_label.setStyleSheet("background: #111; color: #555; min-height: 160px;")
         self._viewer_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         root.addWidget(self._viewer_label, stretch=1)
 
-        # Try to embed a pyvista viewer if available
-        self._pyvista_plotter = None
-        self._try_embed_pyvista(root)
-
-    def _try_embed_pyvista(self, root: QVBoxLayout) -> None:
-        try:
-            import pyvista as pv
-            from pyvistaqt import BackgroundPlotter
-            self._pyvista_plotter = BackgroundPlotter(parent=self, show=False)
-            self._pyvista_plotter.set_background("#111111")
-            root.removeWidget(self._viewer_label)
-            self._viewer_label.hide()
-            root.addWidget(self._pyvista_plotter.interactor, stretch=1)
-        except Exception:
-            pass   # pyvista not installed — keep the placeholder label
+        viewer_btns = QHBoxLayout()
+        self._ql_btn = QPushButton("Open in Quick Look")
+        self._ql_btn.setEnabled(False)
+        self._ql_btn.clicked.connect(self._open_quicklook)
+        self._reveal_btn = QPushButton("Reveal in Finder")
+        self._reveal_btn.setEnabled(False)
+        self._reveal_btn.clicked.connect(self._reveal_in_finder)
+        viewer_btns.addWidget(self._ql_btn)
+        viewer_btns.addWidget(self._reveal_btn)
+        viewer_btns.addStretch()
+        root.addLayout(viewer_btns)
 
     # ------------------------------------------------------------------
     # Public
@@ -160,6 +164,12 @@ class ReconstructionPanel(QWidget):
         self._log.clear()
         self._status_label.setText("Idle")
         self._output_label.clear()
+        self._model_path = None
+        self._thumb_pixmap = None
+        self._viewer_label.setPixmap(QPixmap())
+        self._viewer_label.setText("3D preview appears here after reconstruction.")
+        self._ql_btn.setEnabled(False)
+        self._reveal_btn.setEnabled(False)
 
     def set_detail(self, detail: str) -> None:
         for i in range(self._detail_combo.count()):
@@ -216,13 +226,75 @@ class ReconstructionPanel(QWidget):
     # ------------------------------------------------------------------
 
     def _load_model(self, path: str) -> None:
-        if self._pyvista_plotter is None:
+        self._model_path = path
+        self._ql_btn.setEnabled(True)
+        self._reveal_btn.setEnabled(True)
+        self._render_thumbnail(path)
+
+    def _render_thumbnail(self, path: str) -> None:
+        """Render a static preview image via `qlmanage -t` (async, with a timeout).
+
+        RealityKit output is USDZ, which only Apple's renderers understand — so we
+        use the system Quick Look thumbnailer instead of a Python mesh library.
+        Runs asynchronously so a slow Quick Look never blocks the UI; the
+        interactive 'Open in Quick Look' button works regardless.
+        """
+        import tempfile
+        self._thumb_pixmap = None
+        self._viewer_label.setPixmap(QPixmap())  # clear any previous image
+        self._viewer_label.setText("Rendering preview…")
+        out_dir = tempfile.mkdtemp(prefix="usdz_thumb_")
+        self._thumb_expected = str(Path(out_dir) / (Path(path).name + ".png"))
+
+        proc = QProcess(self)
+        self._thumb_proc = proc
+        proc.finished.connect(lambda *_: self._on_thumb_done())
+        QTimer.singleShot(20000, self._on_thumb_timeout)
+        proc.start("qlmanage", ["-t", "-s", "1024", "-o", out_dir, path])
+
+    def _on_thumb_done(self) -> None:
+        thumb = self._thumb_expected
+        if thumb and Path(thumb).exists():
+            self._thumb_pixmap = QPixmap(thumb)
+            self._apply_thumbnail()
+        else:
+            self._viewer_label.setText(
+                "Preview thumbnail unavailable — use “Open in Quick Look”."
+            )
+
+    def _on_thumb_timeout(self) -> None:
+        proc = self._thumb_proc
+        if proc is not None and proc.state() != QProcess.ProcessState.NotRunning:
+            proc.kill()
+            self._viewer_label.setText(
+                "Preview is taking a while — use “Open in Quick Look”."
+            )
+
+    def _apply_thumbnail(self) -> None:
+        if not self._thumb_pixmap or self._thumb_pixmap.isNull():
             return
-        try:
-            import pyvista as pv
-            mesh = pv.read(path)
-            self._pyvista_plotter.clear()
-            self._pyvista_plotter.add_mesh(mesh, color="tan", smooth_shading=True)
-            self._pyvista_plotter.reset_camera()
-        except Exception as exc:
-            self._log.append(f"[3D viewer] Could not load model: {exc}")
+        self._viewer_label.setPixmap(
+            self._thumb_pixmap.scaled(
+                self._viewer_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_thumbnail()
+
+    def _open_quicklook(self) -> None:
+        if self._model_path:
+            import subprocess
+            # qlmanage -p opens the interactive Quick Look panel (rotatable 3D)
+            subprocess.Popen(
+                ["qlmanage", "-p", self._model_path],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+
+    def _reveal_in_finder(self) -> None:
+        if self._model_path:
+            import subprocess
+            subprocess.Popen(["open", "-R", self._model_path])

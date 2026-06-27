@@ -30,7 +30,7 @@ The app is not codesigned, so the first launch needs right-click → **Open** to
    - **Interval**: fires every N seconds regardless.
    - **Manual**: only when you press Capture Now.
    The live preview shows a rule-of-thirds grid and a colour-coded framing box (green = good, yellow = marginal, red = reject).
-3. **Reconstruct tab** — pick a detail level (Preview → Raw) and hit Start. Progress bars show feature extraction → matching → SfM → MVS → meshing.
+3. **Reconstruct tab** — pick a detail level (Preview → Raw) and hit Start. Progress bars show feature extraction → matching → SfM → MVS → meshing. When it finishes, a preview of the `.usdz` appears in the panel; **Open in Quick Look** opens the full interactive (rotatable) viewer, and **Reveal in Finder** locates the file.
 
 Frames live in `~/photogrammetry_sessions/session_<timestamp>/`; the output model is written alongside as `model.usdz`.
 
@@ -64,7 +64,7 @@ Python 3.12 is recommended.
 
 Output: `dist/Photogrammetry Studio.app` and `dist/PhotogrammetryStudio-macOS.zip`.
 
-The build uses PyInstaller with a small runtime hook ([pyinstaller_hooks/pyi_rth_cv2.py](pyinstaller_hooks/pyi_rth_cv2.py)) that works around a known cv2-on-macOS-bundle import recursion. pyvista/VTK are excluded to keep the bundle ~150 MB zipped instead of ~400 MB — the 3D preview pane stays a placeholder in the packaged build, but loading USDZ in Reality Composer / Preview works fine.
+The build uses PyInstaller with a small runtime hook ([pyinstaller_hooks/pyi_rth_cv2.py](pyinstaller_hooks/pyi_rth_cv2.py)) that works around a known cv2-on-macOS-bundle import recursion. The in-app 3D preview renders the USDZ via macOS Quick Look (`qlmanage`) and the **Open in Quick Look** button opens the full interactive viewer — so no heavy 3D library (pyvista/VTK) is bundled, keeping the app lean.
 
 ## Architecture
 

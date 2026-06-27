@@ -57,9 +57,9 @@ Sessions write to `~/photogrammetry_sessions/session_<timestamp>/`; output is
   just macOS + Xcode CLT (`xcode-select --install`); the Swift helper compiles on
   first run. There is no non-Mac reconstruction path (COLMAP was removed).
 - PyInstaller build uses a runtime hook (`pyinstaller_hooks/pyi_rth_cv2.py`) for a
-  cv2-on-macOS import recursion; **pyvista/VTK are excluded** to keep the bundle
-  small, so the 3D preview pane is a placeholder in the packaged build (USDZ still
-  opens in Preview / Reality Composer).
+  cv2-on-macOS import recursion. The Reconstruct panel's 3D preview renders the
+  USDZ via macOS **Quick Look** (`qlmanage -t` for the thumbnail, `qlmanage -p`
+  for the interactive viewer) — no Python 3D library, so pyvista/VTK are gone.
 - The app is not codesigned — first launch needs right-click → Open.
 
 ## Goal 3 (GNC 3-week plan) — current work item

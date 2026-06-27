@@ -8,8 +8,9 @@ Build:
 Output:
     dist/Photogrammetry Studio.app
 
-Note: pyvista is optional at runtime; if not bundled, the panel falls back
-to a placeholder label.  Including it bloats the binary by ~200 MB.
+Note: the 3D preview uses macOS Quick Look (`qlmanage`), so no Python 3D
+library is bundled.  pyvista/VTK are excluded below to stay lean if they
+happen to be present in the build environment.
 """
 
 from pathlib import Path
