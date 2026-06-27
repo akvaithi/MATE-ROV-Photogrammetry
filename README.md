@@ -102,6 +102,18 @@ and logged to `~/.photogrammetry/logs/` (a rotating app log plus a per-run
 (`stream_latency_warn_ms`, `stream_health_log`). Full write-up:
 [docs/RTSP-Pipeline.md](docs/RTSP-Pipeline.md).
 
+## Platform & roadmap
+
+**macOS only** — reconstruction uses Apple's Object Capture, which has no
+Windows/Linux equivalent. The capture side (RTSP + quality gating) is
+cross-platform, so a Windows operator can drive the app and reconstruct on a
+shared Mac (a Mac mini works well as a build node).
+
+A native **Swift/SwiftUI rewrite was considered and deferred** for now: the app
+works, the team works in Python, and RTSP ingest — one line with OpenCV — is
+non-trivial in Swift (AVFoundation can't play RTSP). The likely next native step
+is an **embedded interactive USDZ viewer** to replace the Quick Look hand-off.
+
 ## License
 
 MIT — see source headers.

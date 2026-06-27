@@ -62,12 +62,24 @@ Sessions write to `~/photogrammetry_sessions/session_<timestamp>/`; output is
   for the interactive viewer) — no Python 3D library, so pyvista/VTK are gone.
 - The app is not codesigned — first launch needs right-click → Open.
 
-## Goal 3 (GNC 3-week plan) — current work item
+## Platform & direction
 
-> *Refine the RTSP-to-3D pipeline: add **error logging for stream drops / high
-> latency** and document performance metrics.*
+**macOS-only by design** — RealityKit / Object Capture has no Windows/Linux port.
+The capture half (RTSP + quality gating) is cross-platform; to drive the app from
+Windows, reconstruct on a shared Mac.
 
-Start in `app/core/stream_worker.py` (the RTSP loop + reconnect) — that's where
-drop/latency detection belongs. Surface events through a logger (and ideally a UI
-indicator via a signal), and document the metrics. See `3_Week Plan.md` Project 3
-in the parent GNC folder.
+A full **Swift/SwiftUI rewrite was considered and deferred**: the app already
+works and the team lives in Python. The key constraint if it's ever revisited is
+that **RTSP ingest is the blocker** — OpenCV does it in one line, but AVFoundation
+can't play RTSP, so a native build needs VLCKit or a bundled FFmpeg. De-risk RTSP
+first before committing. The highest-value native step *short* of a rewrite is an
+**embedded interactive USDZ viewer** via a small Swift helper (same pattern as the
+Object Capture helper), replacing the current Quick Look hand-off.
+
+## GNC 3-week plan status
+
+Goal 3 (*refine the RTSP-to-3D pipeline: error logging for stream drops / high
+latency + performance metrics*) is **done** — see `app/core/stream_health.py`,
+`stream_worker.py`, and [docs/RTSP-Pipeline.md](docs/RTSP-Pipeline.md). This was
+the last open item in `3_Week Plan.md` (Project 3); Goals 1 & 2 (SITL sim + servo
+control) live in the parent GNC folder.
