@@ -93,8 +93,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "Photogrammetry Studio",
         "CFBundleDisplayName": "Photogrammetry Studio",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "0.1.0",
+        "CFBundleShortVersionString": "0.2.0",
+        "CFBundleVersion": "0.2.0",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSCameraUsageDescription": "Used for live RTSP capture preview.",
