@@ -50,7 +50,10 @@ def main() -> None:
             level="DEBUG",
             rotation="5 MB",
             retention="14 days",
-            enqueue=True,        # safe across the worker threads
+            # NOTE: do NOT set enqueue=True here. loguru's enqueue spawns a
+            # multiprocessing queue/resource-tracker, which in a PyInstaller
+            # bundle (macOS "spawn") re-executes the .app and fork-bombs new
+            # windows. loguru is already thread-safe for our QThread workers.
         )
         logger.info(f"Logging to {log_dir}")
     except OSError as exc:
@@ -63,4 +66,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Must be the first thing in a frozen app: lets any spawned multiprocessing
+    # helper bail out instead of re-running main() and opening another window.
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()
