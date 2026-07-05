@@ -206,10 +206,15 @@ class ModelViewer(QWidget):
         # RealityScan install steals the .glb association and then rejects it).
         if suffix in (".glb", ".gltf", ".obj", ".stl", ".ply"):
             try:
-                subprocess.Popen(
-                    [sys.executable, "-m", "app.tools.view_model", path],
-                    cwd=str(_project_root()),
-                )
+                if getattr(sys, "frozen", False):
+                    # Packaged: re-launch the bundled exe in --view mode.
+                    subprocess.Popen([sys.executable, "--view", path])
+                else:
+                    # From source: run the viewer module from the project root.
+                    subprocess.Popen(
+                        [sys.executable, "-m", "app.tools.view_model", path],
+                        cwd=str(_project_root()),
+                    )
                 return
             except Exception:
                 pass  # fall through to the OS opener

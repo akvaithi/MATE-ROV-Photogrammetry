@@ -24,6 +24,13 @@ from app.ui.main_window import MainWindow
 
 
 def main() -> None:
+    # Lightweight viewer mode: `<app> --view <model>` opens the model in the
+    # interactive 3D viewer and exits.  The packaged app re-launches itself this
+    # way so "View in 3D" never depends on the OS file association.
+    if len(sys.argv) >= 3 and sys.argv[1] == "--view":
+        from app.tools.view_model import main as view_main
+        sys.exit(view_main(["view_model", sys.argv[2]]))
+
     # High-DPI support (Qt 6 enables this by default, but be explicit)
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
