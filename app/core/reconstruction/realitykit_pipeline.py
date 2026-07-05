@@ -16,23 +16,25 @@ from typing import Callable, Optional
 
 from loguru import logger
 
+from app.core.reconstruction.base import (
+    complete_all_stages,
+    emit_stage_progress,
+)
+
 HELPER_SRC = Path(__file__).parent / "realitykit_helper.swift"
 HELPER_CACHE_DIR = Path.home() / ".photogrammetry" / "bin"
 HELPER_BIN = HELPER_CACHE_DIR / "realitykit_helper"
 
-# Apple's session gives a single fractional progress (0..1).  We splay it
-# across the existing UI stage bars so the user gets familiar feedback.
-STAGE_BANDS: list[tuple[str, float, float]] = [
-    ("Feature Extraction",             0.00, 0.10),
-    ("Feature Matching",               0.10, 0.30),
-    ("Sparse Reconstruction (SfM)",    0.30, 0.55),
-    ("Dense Reconstruction (MVS)",     0.55, 0.90),
-    ("Meshing",                        0.90, 1.00),
-]
-
 
 class RealityKitPipeline:
-    """Object Capture reconstruction via a compiled Swift helper."""
+    """Object Capture reconstruction via a compiled Swift helper.
+
+    Apple's session gives a single fractional progress (0..1); the shared
+    `emit_stage_progress` helper splays it across the UI stage bars.
+    """
+
+    name = "RealityKit (Apple Object Capture)"
+    output_suffix = ".usdz"
 
     def __init__(self, detail: str = "medium") -> None:
         self.detail = detail
@@ -127,10 +129,7 @@ class RealityKitPipeline:
             raise RuntimeError(
                 f"RealityKit completed but output {output_path} is missing."
             )
-        # Mark every stage bar complete for a tidy UI finish.
-        if progress_cb:
-            for stage, _, _ in STAGE_BANDS:
-                progress_cb(stage, 100)
+        complete_all_stages(progress_cb)
         return output_path
 
     # ------------------------------------------------------------------
@@ -146,7 +145,7 @@ class RealityKitPipeline:
         if mtype == "progress":
             fraction = float(msg.get("fraction", 0.0))
             if progress_cb:
-                self._emit_stage_progress(fraction, progress_cb)
+                emit_stage_progress(fraction, progress_cb)
         elif mtype == "warn":
             logger.warning(f"RealityKit: {msg.get('message')}")
         elif mtype == "info":
@@ -155,17 +154,3 @@ class RealityKitPipeline:
             raise RuntimeError(f"RealityKit error: {msg.get('message')}")
         elif mtype in ("complete", "request_complete", "cancelled"):
             logger.info(f"RealityKit: {mtype}")
-
-    @staticmethod
-    def _emit_stage_progress(
-        fraction: float,
-        cb: Callable[[str, int], None],
-    ) -> None:
-        fraction = max(0.0, min(1.0, fraction))
-        for stage, lo, hi in STAGE_BANDS:
-            if fraction >= hi:
-                cb(stage, 100)
-            elif fraction >= lo:
-                pct = int(round((fraction - lo) / (hi - lo) * 100))
-                cb(stage, pct)
-            # else: stage not yet started — leave its bar at its prior value

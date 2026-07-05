@@ -156,7 +156,7 @@ class SettingsDialog(QDialog):
         """Return an updated AppConfig from current widget values.
 
         Starts from the original config so fields not exposed by the dialog
-        (e.g. realitykit_detail) are preserved.
+        (e.g. reconstruction_backend, reconstruction_detail) are preserved.
         """
         from dataclasses import replace
         return replace(

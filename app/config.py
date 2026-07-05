@@ -35,8 +35,14 @@ class AppConfig:
     output_dir: str = str(Path.home() / "photogrammetry_sessions")
     jpeg_quality: int = 95               # JPEG save quality for captured frames
 
-    # Reconstruction — RealityKit (Apple Object Capture) is the only backend.
-    realitykit_detail: str = "medium"    # preview | reduced | medium | full | raw
+    # Reconstruction — pluggable backend, auto-selected per platform:
+    #   macOS   → RealityKit (Apple Object Capture)
+    #   Windows → RealityScan (Epic, free) preferred, else Meshroom (needs NVIDIA)
+    #   Linux   → Meshroom (needs NVIDIA)
+    reconstruction_backend: str = "auto"  # auto | realitykit | realityscan | meshroom
+    reconstruction_detail: str = "medium"  # preview | reduced | medium | full | raw
+    realityscan_exe: str = ""             # optional explicit path to RealityScan.exe
+    meshroom_bin: str = ""                # optional explicit path to meshroom_batch
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +53,9 @@ class AppConfig:
         if not path.exists():
             return cls()
         data = json.loads(path.read_text())
+        # Back-compat: the old single-backend field was `realitykit_detail`.
+        if "reconstruction_detail" not in data and "realitykit_detail" in data:
+            data["reconstruction_detail"] = data["realitykit_detail"]
         # Only keep keys that exist in the dataclass to handle version upgrades gracefully
         valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in valid_keys}

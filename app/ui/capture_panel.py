@@ -36,6 +36,7 @@ class CapturePanel(QWidget):
     stop_capture_requested = pyqtSignal()
     manual_capture_requested = pyqtSignal()
     export_pngs_requested = pyqtSignal()
+    import_images_requested = pyqtSignal()
     reconstruct_requested = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
@@ -134,6 +135,13 @@ class CapturePanel(QWidget):
         self._export_btn = QPushButton("Export PNGs…")
         self._export_btn.clicked.connect(self.export_pngs_requested)
 
+        self._import_btn = QPushButton("Import Images…")
+        self._import_btn.setToolTip(
+            "Add existing photos to this session for a quick reconstruction test "
+            "(no camera needed)."
+        )
+        self._import_btn.clicked.connect(self.import_images_requested)
+
         self._recon_btn = QPushButton("Reconstruct 3D")
         self._recon_btn.setStyleSheet("background: #1971c2; color: white; font-weight: bold;")
         self._recon_btn.clicked.connect(self.reconstruct_requested.emit)
@@ -141,6 +149,7 @@ class CapturePanel(QWidget):
         btn_row.addWidget(self._start_btn)
         btn_row.addWidget(self._end_btn)
         btn_row.addWidget(self._manual_btn)
+        btn_row.addWidget(self._import_btn)
         btn_row.addWidget(self._export_btn)
         btn_row.addStretch()
         btn_row.addWidget(self._recon_btn)

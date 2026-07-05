@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, pyqtSlot
+from datetime import datetime
+
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtWidgets import (
     QApplication,
@@ -27,7 +29,7 @@ from app.config import AppConfig
 from app.core.capture_engine import CaptureEngine
 from app.core.reconstruction.reconstruction_worker import ReconstructionWorker
 from app.core.stream_worker import StreamWorker
-from app.state import AppState
+from app.state import AppState, FrameRecord
 from app.ui.capture_panel import CapturePanel
 from app.ui.reconstruction_panel import ReconstructionPanel
 from app.ui.settings_dialog import SettingsDialog
@@ -35,6 +37,14 @@ from app.ui.stream_panel import StreamPanel
 
 
 class MainWindow(QMainWindow):
+    # Cross-thread signals into the CaptureEngine (which lives on its own thread
+    # and owns QTimers).  Emitting these gives Qt a *queued* call that runs on the
+    # engine's thread — calling the engine's methods directly from the main thread
+    # would touch those timers cross-thread ("Timers cannot be stopped from
+    # another thread") and crash on shutdown.
+    _engine_update_config = pyqtSignal(object)
+    _engine_stop_capture = pyqtSignal()
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Photogrammetry Studio")
@@ -52,6 +62,8 @@ class MainWindow(QMainWindow):
         self._capture_engine = CaptureEngine(self._config, self._state)
         self._capture_thread = QThread(self)
         self._capture_engine.moveToThread(self._capture_thread)
+        # Destroy the engine (and its QTimers) on its own thread when it stops.
+        self._capture_thread.finished.connect(self._capture_engine.deleteLater)
         self._capture_thread.start()
 
         self._recon_worker: ReconstructionWorker | None = None
@@ -62,8 +74,8 @@ class MainWindow(QMainWindow):
 
         self._stream_panel = StreamPanel()
         self._capture_panel = CapturePanel()
-        self._recon_panel = ReconstructionPanel()
-        self._recon_panel.set_detail(self._config.realitykit_detail)
+        self._recon_panel = ReconstructionPanel(self._config)
+        self._recon_panel.set_detail(self._config.reconstruction_detail)
 
         self._tabs.addTab(self._stream_panel, "Stream")
         self._tabs.addTab(self._capture_panel, "Capture")
@@ -94,6 +106,11 @@ class MainWindow(QMainWindow):
         new_session_act.setShortcut("Ctrl+N")
         new_session_act.triggered.connect(self._new_session)
         file_menu.addAction(new_session_act)
+
+        import_act = QAction("Import Images…", self)
+        import_act.setShortcut("Ctrl+I")
+        import_act.triggered.connect(self._import_images)
+        file_menu.addAction(import_act)
 
         export_act = QAction("Export Model…", self)
         export_act.setShortcut("Ctrl+E")
@@ -161,7 +178,12 @@ class MainWindow(QMainWindow):
         self._capture_panel.capture_mode_changed.connect(self._on_mode_changed)
         self._capture_panel.interval_changed.connect(self._on_interval_changed)
         self._capture_panel.export_pngs_requested.connect(self._export_pngs)
+        self._capture_panel.import_images_requested.connect(self._import_images)
         self._capture_panel.reconstruct_requested.connect(self._start_reconstruction)
+
+        # Thread-safe (queued) calls into the capture engine on its own thread.
+        self._engine_update_config.connect(self._capture_engine.update_config)
+        self._engine_stop_capture.connect(self._capture_engine.stop_capture)
 
         # Engine → UI
         self._capture_engine.quality_updated.connect(
@@ -205,16 +227,16 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def _on_mode_changed(self, mode: str) -> None:
         self._config.capture_mode = mode
-        self._capture_engine.update_config(self._config)
+        self._engine_update_config.emit(self._config)
 
     @pyqtSlot(float)
     def _on_interval_changed(self, secs: float) -> None:
         self._config.interval_seconds = secs
-        self._capture_engine.update_config(self._config)
+        self._engine_update_config.emit(self._config)
 
     @pyqtSlot(str)
     def _on_detail_changed(self, detail: str) -> None:
-        self._config.realitykit_detail = detail
+        self._config.reconstruction_detail = detail
         self._config.save(AppConfig.default_config_path())
 
     @pyqtSlot()
@@ -254,11 +276,87 @@ class MainWindow(QMainWindow):
 
     def _new_session(self) -> None:
         if self._state.capture_running:
-            self._capture_engine.stop_capture()
+            self._engine_stop_capture.emit()
         self._state.new_session(Path(self._config.output_dir))
         self._capture_panel.clear_session()
+        self._capture_panel.on_capture_stopped()
         self._recon_panel.reset()
         self._status_bar.showMessage(f"New session: {self._state.session_id}")
+
+    @pyqtSlot()
+    def _import_images(self) -> None:
+        """Copy existing images into the current session so they can be
+        reconstructed without capturing from the stream — handy for testing."""
+        if self._state.frames_dir is None:
+            QMessageBox.information(self, "No session", "Start a session first.")
+            return
+
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Import images into this session",
+            self._config.output_dir,
+            "Images (*.jpg *.jpeg *.png *.bmp *.tif *.tiff)",
+        )
+        if not files:
+            return
+
+        frames_dir = self._state.frames_dir
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        start = self._state.frame_count
+
+        progress = QProgressDialog("Importing images…", "Cancel", 0, len(files), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+
+        import shutil
+        imported = 0
+        for i, src in enumerate(files):
+            if progress.wasCanceled():
+                break
+            progress.setValue(i)
+            QApplication.processEvents()
+
+            idx = start + imported + 1
+            ext = Path(src).suffix.lower() or ".jpg"
+            dest = frames_dir / f"frame_{idx:04d}{ext}"
+            try:
+                shutil.copy2(src, dest)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"Import failed for {src}: {exc}")
+                continue
+
+            bgr = cv2.imread(str(dest))
+            sharp = 0.0
+            if bgr is not None:
+                gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+                sharp = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+            record = FrameRecord(
+                index=idx,
+                filename=str(dest),
+                timestamp=datetime.now().isoformat(),
+                motion_score=0.0,
+                sharpness_score=sharp,
+                novelty_score=1.0,
+                capture_mode="imported",
+            )
+            self._state.add_frame(record)
+            if bgr is not None:
+                self._capture_panel.on_frame_captured(
+                    record, cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                )
+            imported += 1
+
+        progress.setValue(len(files))
+        self._status_bar.showMessage(
+            f"Imported {imported} image(s). Total frames: {self._state.frame_count}"
+        )
+        QMessageBox.information(
+            self,
+            "Import complete",
+            f"Imported {imported} image(s).\n"
+            f"Total frames now: {self._state.frame_count}.\n\n"
+            "Go to the Reconstruct tab and press Start.",
+        )
 
     def _export_pngs(self) -> None:
         if self._state.frame_count == 0:
@@ -330,7 +428,7 @@ class MainWindow(QMainWindow):
             self._config.save(AppConfig.default_config_path())
             # Hot-update workers
             self._stream_worker.update_config(new_config)
-            self._capture_engine.update_config(new_config)
+            self._engine_update_config.emit(new_config)
             self._status_bar.showMessage("Settings saved.", 3000)
 
     # ------------------------------------------------------------------
@@ -341,7 +439,11 @@ class MainWindow(QMainWindow):
         self._stream_worker.stop()
         self._stream_worker.wait(3000)
 
-        self._capture_engine.stop_capture()
+        # Stop the engine *on its own thread* (queued), then shut the thread's
+        # event loop down.  The queued stop is processed before quit(), so the
+        # QTimers are stopped by the thread that owns them — no cross-thread
+        # timer teardown crash.
+        self._engine_stop_capture.emit()
         self._capture_thread.quit()
         self._capture_thread.wait(3000)
 

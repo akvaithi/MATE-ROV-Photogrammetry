@@ -1,10 +1,10 @@
 """
-ReconstructionWorker — runs the RealityKit (Apple Object Capture) pipeline on a
-dedicated QThread, emitting granular progress signals back to the UI.
+ReconstructionWorker — runs the selected reconstruction backend on a dedicated
+QThread, emitting granular progress signals back to the UI.
 
-RealityKit is the only backend: it produces the highest-quality meshes with no
-extra tooling. It is macOS-only (Apple's PhotogrammetrySession), so on an
-unsupported platform the worker fails fast with a clear message.
+The backend is chosen at runtime by `select_backend` (RealityKit on macOS,
+RealityScan or Meshroom on Windows/Linux), so this worker is engine-agnostic:
+every backend exposes the same `run(image_dir, output_path, progress_cb)` surface.
 """
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from app.config import AppConfig
-from app.core.reconstruction.realitykit_pipeline import RealityKitPipeline
+from app.core.reconstruction.base import ReconstructionBackend
+from app.core.reconstruction.registry import select_backend
 from app.state import AppState
 
 
@@ -50,11 +51,11 @@ class ReconstructionWorker(QThread):
             self.reconstruction_failed.emit("No active session.")
             return
 
-        if not RealityKitPipeline.is_available():
-            self.reconstruction_failed.emit(
-                "RealityKit (Apple Object Capture) is unavailable. It requires "
-                "macOS 12+ with the Swift toolchain (run `xcode-select --install`)."
-            )
+        # Select the backend up front so an unavailable engine fails clearly.
+        try:
+            backend: ReconstructionBackend = select_backend(self._config)
+        except Exception as exc:
+            self.reconstruction_failed.emit(str(exc))
             return
 
         # Intercept loguru output and relay to UI
@@ -62,10 +63,10 @@ class ReconstructionWorker(QThread):
         sink_id = logger.add(
             lambda msg: self.log_message.emit(msg.strip()), level="DEBUG"
         )
-        logger.info("Reconstruction backend: RealityKit (Apple Object Capture)")
+        logger.info(f"Reconstruction backend: {backend.name}")
 
         try:
-            output_path = self._run_realitykit()
+            output_path = self._run_backend(backend)
         except Exception as exc:
             logger.remove(sink_id)
             self.reconstruction_failed.emit(str(exc))
@@ -85,13 +86,13 @@ class ReconstructionWorker(QThread):
     # Backend
     # ------------------------------------------------------------------
 
-    def _run_realitykit(self) -> Path:
+    def _run_backend(self, backend: ReconstructionBackend) -> Path:
         assert self._state.frames_dir is not None
         assert self._state.output_dir is not None
-        pipeline = RealityKitPipeline(detail=self._config.realitykit_detail)
-        return pipeline.run(
+        output_path = self._state.output_dir / f"model{backend.output_suffix}"
+        return backend.run(
             image_dir=self._state.frames_dir,
-            output_path=self._state.output_dir / "model.usdz",
+            output_path=output_path,
             progress_cb=self._progress_cb,
         )
 

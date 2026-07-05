@@ -1,12 +1,28 @@
 PyQt6==6.8.1
 opencv-python-headless==4.10.0.84
-numpy==1.26.4
+numpy>=1.26,<3
 Pillow==11.1.0
 loguru==0.7.3
 
-# Reconstruction uses Apple's RealityKit / Object Capture (macOS only) via a
-# compiled Swift helper — no Python packages required, just Xcode Command Line
-# Tools (`xcode-select --install`).
+# Mesh handling + the built-in interactive 3D viewer:
+#   trimesh  — convert backend OBJ output to a self-contained textured GLB (and
+#              an STL copy), and load models for viewing.
+#   pyglet   — OpenGL window backend for trimesh's viewer (`View in 3D`), so
+#              viewing never depends on the OS file association.
+#   scipy    — required by trimesh for smooth-shaded rendering.
+trimesh==4.5.3
+pyglet<2
+scipy>=1.11
+
+# Reconstruction is a pluggable, auto-selected backend — no bundled engine:
+#   • macOS   → RealityKit / Object Capture via a compiled Swift helper
+#               (needs Xcode Command Line Tools: `xcode-select --install`).
+#   • Windows → RealityScan (Epic, free for students / sub-$1M teams) preferred;
+#               install from realityscan.com. Meshroom is a fallback but REQUIRES
+#               an NVIDIA CUDA GPU.
+#   • Linux   → Meshroom (alicevision.org), NVIDIA CUDA GPU required.
 #
-# The in-app 3D preview renders the USDZ with macOS Quick Look (`qlmanage`), so
-# no Python 3D library (pyvista/VTK) is needed.
+# The in-app 3D preview shows a native thumbnail where available (macOS Quick
+# Look) and delegates interactive rotation to the OS 3D viewer (Windows "3D
+# Viewer" / Quick Look / xdg-open) — so no heavy 3D library (pyvista/VTK) is
+# bundled and it works fully offline.
